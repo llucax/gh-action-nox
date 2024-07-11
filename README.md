@@ -36,6 +36,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           nox-session: ${{ matrix.nox-session }}
+          git-username: ${{ secrets.GIT_USER }}
+          git-password: ${{ secrets.GIT_PASS }}
 ```
 
 ## Inputs
@@ -53,6 +55,21 @@ jobs:
 
   Projects not having any extra dependency to run nox can just use `"nox"` here.
 
+* `checkout`: Whether to checkout the code. Optional. Default: `true`.
+
+  When true, this action will first setup git using the
+  [`gh-action-setup-git`](https://github.com/frequenz-floss/gh-action-setup-git/),
+  passing `git-username` and `git-password` as credentials if provided, and then
+  fetch the code using [`actions/checkout`](https://github.com/actions/checkout).
+
+* `git-username`: The username to use for the git configuration. Optional.
+
+  This is particularly useful if `pip` needs to access a private repository.
+
+* `git-password`: The password to use for the git configuration. Optional.
+
+  This is particularly useful if `pip` needs to access a private repository.
+
 ## Recommended use with matrix jobs
 
 When using a matrix, it is recommended to create a dummy job to *merge* all the
@@ -62,12 +79,20 @@ a requirement and you don't need to update your requirements each time you
 update your matrix.
 
 ```yaml
+  # This job runs if all the `nox` matrix jobs ran and succeeded.
+  # It is only used to have a single job that we can require in branch
+  # protection rules, so we don't have to update the protection rules each time
+  # we add or remove a job from the matrix.
   nox-all:
     # The job name should match the name of the `nox` job.
     name: Test with nox
     needs: ["nox"]
-    runs-on: ubuntu-20.04
+    # We skip this job only if nox was also skipped
+    if: always() && needs.nox.result != 'skipped'
+    runs-on: ubuntu-22.04
+    env:
+      DEPS_RESULT: ${{ needs.nox.result }}
     steps:
-      - name: Return true
-        run: "true"
+      - name: Check matrix job result
+        run: test "$DEPS_RESULT" = "success"
 ```
